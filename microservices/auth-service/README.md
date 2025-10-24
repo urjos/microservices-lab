@@ -1,93 +1,103 @@
 # Authentication Service (`auth-service`)
 
-Este microservicio es el responsable central de la gestión de la identidad y la autenticación de usuarios en la plataforma.
+Este microservicio es el responsable central de la gestión de la identidad, autenticación y perfiles de usuario en la plataforma.
 
 ## Propósito Principal
 
-Su única responsabilidad es manejar el ciclo de vida de la autenticación del usuario:
+Su responsabilidad es manejar el ciclo de vida completo del usuario:
 
 - Registro de nuevos usuarios.
-- Inicio de sesión (autenticación).
+- Activación de cuentas por correo electrónico.
+- Inicio de sesión (autenticación por credenciales).
 - Emisión, validación y refresco de JSON Web Tokens (JWT).
-- Gestión básica del perfil de usuario.
-
-## Funcionalidades Clave
-
-- **Registro de Usuario:** Permite a nuevos usuarios crear una cuenta.
-- **Autenticación por Credenciales:** Valida el email y la contraseña de un usuario.
-- **Emisión de Tokens JWT:** Genera un `access_token` de corta duración y un `refresh_token` de larga duración tras un login exitoso.
-- **Refresco de Tokens:** Permite obtener un nuevo `access_token` usando un `refresh_token` válido.
+- Autenticación a través de proveedores sociales (Google, Facebook).
+- Gestión de perfiles de usuario (fotos, información personal, redes sociales).
+- Recuperación y cambio de contraseñas.
 
 ---
 
 ## API Endpoints
 
-Todos los endpoints están prefijados con `/api/auth`.
+Todos los endpoints están prefijados con `/auth`. La mayoría son proporcionados por la librería **Djoser**.
 
-| Endpoint         | Método  | Descripción                                              | Requiere Auth | Payload de Ejemplo                                 |
-| :--------------- | :------ | :------------------------------------------------------- | :------------ | :------------------------------------------------- |
-| `/register`      | `POST`  | Registra un nuevo usuario en el sistema.                 | No            | `{"email": "user@example.com", "password": "..."}` |
-| `/login`         | `POST`  | Autentica a un usuario y devuelve los tokens JWT.        | No            | `{"email": "user@example.com", "password": "..."}` |
-| `/token/refresh` | `POST`  | Refresca un `access_token` usando un `refresh_token`.    | No            | `{"refresh": "ey..."}`                             |
-| `/profile`       | `GET`   | Obtiene los datos del perfil del usuario autenticado.    | Sí            | N/A                                                |
-| `/profile`       | `PATCH` | Actualiza parcialmente los datos del perfil del usuario. | Sí            | `{"first_name": "John", "last_name": "Doe"}`       |
+| Endpoint                  | Método          | Descripción                                                    | Requiere Auth |
+| :------------------------ | :-------------- | :------------------------------------------------------------- | :------------ |
+| `/users/`                 | `POST`          | Registra un nuevo usuario.                                     | No            |
+| `/users/`                 | `GET`           | **(Custom)** Lista todos los usuarios del sistema.             | No            |
+| `/users/me/`              | `GET/PUT/PATCH` | Obtiene o actualiza los datos del usuario autenticado.         | Sí            |
+| `/users/{id}`             | `GET`           | **(Custom)** Obtiene los datos de un usuario por su ID.        | No            |
+| `/activate/{uid}/{token}` | `GET`           | Activa la cuenta de un usuario.                                | No            |
+| `/jwt/create/`            | `POST`          | Autentica a un usuario y devuelve los tokens JWT.              | No            |
+| `/jwt/refresh/`           | `POST`          | Refresca un `access_token` usando un `refresh_token`.          | No            |
+| `/jwt/verify/`            | `POST`          | Verifica la validez de un `access_token`.                      | No            |
+| `/profile/{slug}`         | `GET`           | **(Custom)** Obtiene el perfil público de un usuario por slug. | No            |
 
 ---
 
 ## Modelo de Datos (PostgreSQL)
 
-Este servicio gestiona una única tabla principal: `auth_user`.
+Este servicio gestiona dos tablas principales interconectadas: `user_useraccount` y `user_profile_profile`.
 
-- **`CustomUser` Model:**
+- **`UserAccount` Model:** Almacena la información de autenticación y los datos básicos.
+
   - `id` (UUID, Primary Key)
   - `email` (string, unique)
+  - `username` (string, unique)
+  - `slug` (string, unique)
   - `password` (string, hashed)
   - `first_name` (string)
   - `last_name` (string)
-  - `is_active`, `is_staff`, `is_superuser` (boolean)
-  - `date_joined`, `last_login` (datetime)
+  - `is_active`, `is_staff`, `is_superuser`, `is_online`, `verified` (boolean)
+  - `role` (string, con choices como 'customer', 'admin', etc.)
+
+- **`Profile` Model:** Almacena información extendida y opcional del usuario. Se crea automáticamente al registrar un nuevo usuario.
+  - `user` (OneToOne con `UserAccount`)
+  - `picture`, `banner` (ImageField)
+  - `location`, `url`, `profile_info` (string/text)
+  - `birthday` (date)
+  - Campos para redes sociales (`facebook`, `twitter`, `github`, etc.)
 
 ---
 
 ## Integración con Kafka (Eventos)
 
-Este servicio actúa como **Productor** de eventos relacionados con el usuario.
+Este servicio está diseñado para actuar como **Productor** de eventos relacionados con el ciclo de vida del usuario.
 
 ### Eventos Publicados
 
 - **Topic:** `user_events`
   - **Evento:** `user.created`
-  - **Descripción:** Se publica inmediatamente después de que un nuevo usuario se registra exitosamente. Es utilizado por otros servicios para inicializar datos relacionados con el nuevo usuario (ej. `notifications_service` para enviar un email de bienvenida).
+  - **Descripción:** Se publica inmediatamente después de que un nuevo usuario se registra exitosamente. Es utilizado por otros servicios para inicializar datos relacionados con el nuevo usuario (ej. `email-service` para enviar un email de bienvenida o `blog-service` para asociar contenido).
   - **Payload:**
     ```json
     {
       "event_type": "user.created",
       "data": {
-        "user_id": "c3a2b1f0-...",
+        "id": "c3a2b1f0-...",
         "email": "new.user@example.com",
-        "timestamp": "2023-10-27T10:00:00Z"
+        "username": "newuser"
       }
     }
     ```
+    **Nota:** La implementación de la producción de eventos está presente como código comentado en `apps/user/models.py` y debe ser activada.
 
 ---
 
 ## Variables de Entorno
 
-Para ejecutar este servicio, es necesario configurar las siguientes variables en un archivo `.env` dentro de este directorio.
+Para ejecutar este servicio, es necesario configurar las siguientes variables en un archivo `.env`. La configuración se lee a través de `django-environ`.
 
-| Variable                            | Descripción                                           | Ejemplo                                            |
-| :---------------------------------- | :---------------------------------------------------- | :------------------------------------------------- |
-| `SECRET_KEY`                        | Clave secreta de Django para seguridad criptográfica. | `django-insecure-xyz...`                           |
-| `DEBUG`                             | Activa el modo debug de Django. (`1` o `0`)           | `1`                                                |
-| `DB_NAME`                           | Nombre de la base de datos PostgreSQL.                | `auth_db`                                          |
-| `DB_USER`                           | Usuario para la conexión a la base de datos.          | `auth_user`                                        |
-| `DB_PASSWORD`                       | Contraseña para la conexión a la base de datos.       | `supersecretpassword`                              |
-| `DB_HOST`                           | Host donde se ejecuta la base de datos.               | `auth_db_postgres` (nombre del servicio en Docker) |
-| `DB_PORT`                           | Puerto de la base de datos.                           | `5432`                                             |
-| `KAFKA_BOOTSTRAP_SERVERS`           | URL del broker de Kafka.                              | `kafka:9092`                                       |
-| `JWT_ACCESS_TOKEN_LIFETIME_MINUTES` | Duración del token de acceso en minutos.              | `5`                                                |
-| `JWT_REFRESH_TOKEN_LIFETIME_DAYS`   | Duración del token de refresco en días.               | `1`                                                |
+| Variable                    | Descripción                                           | Ejemplo (del `docker-compose.yaml`) |
+| :-------------------------- | :---------------------------------------------------- | :---------------------------------- |
+| `SECRET_KEY`                | Clave secreta de Django para seguridad criptográfica. | `django-insecure-xyz...`            |
+| `DEBUG`                     | Activa el modo debug de Django. (`True` o `False`)    | `True`                              |
+| `POSTGRES_DB`               | Nombre de la base de datos PostgreSQL.                | `solopython_auth_db`                |
+| `POSTGRES_USER`             | Usuario para la conexión a la base de datos.          | `postgres`                          |
+| `POSTGRES_PASSWORD`         | Contraseña para la conexión a la base de datos.       | `12345678`                          |
+| `REDIS_HOST`                | Host del servicio de Redis.                           | `redis`                             |
+| `REDIS_PORT`                | Puerto del servicio de Redis.                         | `6379`                              |
+| `ALLOWED_HOSTS_DEV`         | Lista de hosts permitidos en desarrollo.              | `localhost,127.0.0.1`               |
+| `CORS_ORIGIN_WHITELIST_DEV` | Lista de orígenes permitidos para CORS en desarrollo. | `http://localhost:3000`             |
 
 ---
 
@@ -96,12 +106,12 @@ Para ejecutar este servicio, es necesario configurar las siguientes variables en
 Para ejecutar comandos específicos de Django dentro del contenedor de este servicio:
 
 ```bash
-# Aplicar migraciones de la base de datos
-docker-compose exec auth-service python manage.py migrate
+# Aplicar migraciones de la base de datos (se ejecuta automáticamente al iniciar)
+docker-compose exec solopython_ms_auth python manage.py migrate
 
 # Crear un superusuario
-docker-compose exec auth-service python manage.py createsuperuser
+docker-compose exec solopython_ms_auth python manage.py createsuperuser
 
 # Ejecutar los tests del servicio
-docker-compose exec auth-service python manage.py test
+docker-compose exec solopython_ms_auth python manage.py test
 ```
