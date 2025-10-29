@@ -9,6 +9,9 @@ from rest_framework import status
 logger = logging.getLogger(__name__)
 
 class HealthCheckView(APIView):
+    """
+    Verifica el estado de salud de las dependencias del servicio (DB y Redis).
+    """
     def get(self, request, *args, **kwargs):
         # Verificar conexión a la base de datos
         db_conn = connections['default']

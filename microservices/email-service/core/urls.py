@@ -2,20 +2,16 @@ from django.contrib import admin
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
-from apps.posts.views import PostViewSet
-from apps.category.views import CategoryListView
 from .views import HealthCheckView
+from apps.notifications.views import ContactMessageViewSet
 
 router = DefaultRouter()
-router.register(r'', PostViewSet, basename='')
+router.register(r'contact', ContactMessageViewSet, basename='contact')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    
+
     path('healthz/', HealthCheckView.as_view(), name='health-check'),
 
-    path('api/', include([
-        path('', include(router.urls)),
-        path('categories/', CategoryListView.as_view(), name='category-list'),
-    ])),
+    path('api/', include(router.urls)),
 ]

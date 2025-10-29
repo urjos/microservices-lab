@@ -59,6 +59,7 @@ DJANGO_APPS = [
 ]
 
 PROJECT_APPS = [
+    'apps.notifications',
 ]
 
 THIRD_PARTY_APPS = [
@@ -188,6 +189,8 @@ REST_FRAMEWORK = {
 }
 
 FILE_UPLOAD_PERMISSIONS = 0o640
+
+EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 # Cerca del final del archivo settings.py
 POLYGON_RPC=env('POLYGON_RPC', default='') # Añade default=''
