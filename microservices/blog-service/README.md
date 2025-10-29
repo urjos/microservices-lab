@@ -1,115 +1,99 @@
 # Blog Service (`blog-service`)
 
-Este microservicio es responsable de toda la lógica y la gestión de datos relacionados con el contenido del blog, incluyendo artículos, categorías y comentarios.
+Este microservicio es responsable de exponer el contenido del blog (posts y categorías) con funcionalidades de paginación, búsqueda y caché.
 
 ## Propósito Principal
 
-Su responsabilidad se centra en el ciclo de vida del contenido del blog:
+Su responsabilidad se centra en la exposición de datos de solo lectura del blog:
 
-- Creación y gestión de artículos (posts).
-- Organización de artículos en categorías.
-- Gestión de comentarios en los artículos.
-- Exposición de una API pública para leer el contenido del blog.
-
-## Funcionalidades Clave
-
-- **CRUD de Artículos:** Permite a los administradores o autores crear, leer, actualizar y eliminar artículos.
-- **Gestión de Categorías:** Permite crear y asignar categorías a los artículos.
-- **Sistema de Comentarios:** Permite a los usuarios comentar en los artículos y a los moderadores gestionarlos.
-- **Publicación:** Maneja el estado de los artículos (borrador, publicado, archivado).
+- Exponer artículos (posts) y categorías.
+- Soportar paginación en la lista de posts.
+- Permitir búsqueda por texto en los posts.
+- Implementar caché con Redis para mejorar el rendimiento.
+- Estar preparado para una futura integración con un servicio de autenticación (JWT).
 
 ---
 
 ## API Endpoints
 
-Todos los endpoints están prefijados con `/api/blog`.
+Todos los endpoints están prefijados con `/api`.
 
-| Endpoint                    | Método      | Descripción                                          | Requiere Auth |
-| :-------------------------- | :---------- | :--------------------------------------------------- | :------------ |
-| `/posts`                    | `GET`       | Obtiene una lista paginada de artículos publicados.  | No            |
-| `/posts`                    | `POST`      | Crea un nuevo artículo (por defecto, como borrador). | Sí (Autor)    |
-| `/posts/{post_id}`          | `GET`       | Obtiene los detalles de un artículo específico.      | No            |
-| `/posts/{post_id}`          | `PUT/PATCH` | Actualiza un artículo existente.                     | Sí (Autor)    |
-| `/posts/{post_id}`          | `DELETE`    | Elimina un artículo.                                 | Sí (Autor)    |
-| `/posts/{post_id}/comments` | `GET`       | Obtiene los comentarios de un artículo.              | No            |
-| `/posts/{post_id}/comments` | `POST`      | Añade un nuevo comentario a un artículo.             | Sí (Usuario)  |
-| `/categories`               | `GET`       | Obtiene una lista de todas las categorías.           | No            |
+| Endpoint            | Método | Descripción                                                                   | Caché     |
+| :------------------ | :----- | :---------------------------------------------------------------------------- | :-------- |
+| `/healthz`          | `GET`  | Verifica el estado de la DB y Redis.                                          | No        |
+| `/api/categories`   | `GET`  | Obtiene una lista de categorías activas.                                      | Sí (120s) |
+| `/api/posts`        | `GET`  | Obtiene una lista paginada de posts publicados. Acepta `?search=` y `?page=`. | No        |
+| `/api/posts/{slug}` | `GET`  | Obtiene los detalles de un post por su slug.                                  | Sí (120s) |
 
 ---
 
-## Modelo de Datos (PostgreSQL)
+## Cómo ejecutar el servicio
 
-Este servicio gestiona las siguientes tablas principales:
+1.  **Asegúrate de tener Docker y Docker Compose instalados.**
 
-- **`Post` Model:**
+2.  **Configurar variables de entorno:**
+    Crea un archivo `.env` en la raíz de este servicio (`blog-service/`) a partir del ejemplo. Puedes simplemente copiarlo.
 
-  - `id` (UUID, Primary Key)
-  - `title` (string)
-  - `slug` (string, unique)
-  - `content` (text)
-  - `author_id` (UUID, Foreign Key conceptual al `user` del `auth-service`)
-  - `status` (string, ej: 'draft', 'published')
-  - `created_at`, `updated_at`, `published_at` (datetime)
+    ```bash
+    cp .env.example .env
+    ```
 
-- **`Category` Model:**
+    Este archivo será utilizado por `docker-compose.yml` para configurar la base de datos, Redis y Django.
 
-  - `id` (UUID, Primary Key)
-  - `name` (string, unique)
-  - `slug` (string, unique)
+3.  **Construir y levantar los contenedores:**
+    Desde el directorio que contiene el `docker-compose.yml` principal (probablemente la raíz de `microservices/`), ejecuta:
 
-- **`Comment` Model:**
-  - `id` (UUID, Primary Key)
-  - `post` (Foreign Key al modelo `Post`)
-  - `author_id` (UUID, Foreign Key conceptual al `user` del `auth-service`)
-  - `content` (text)
-  - `created_at` (datetime)
+    ```bash
+    docker-compose up --build blog
+    ```
 
----
+    Esto construirá la imagen del servicio de blog y levantará su contenedor junto con las dependencias (`postgres` y `redis`).
 
-## Integración con Kafka (Eventos)
+4.  **Poblar la base de datos (Seed):**
+    Una vez que el contenedor esté corriendo, abre otra terminal y ejecuta el comando de `seed` para crear datos de ejemplo.
 
-Este servicio actúa como **Productor** y **Consumidor** de eventos.
+    ```bash
+    docker-compose exec blog_service python manage.py seed_blog
+    ```
 
-### Eventos Publicados
+    Esto creará 5 categorías, 3 autores y 30 posts.
 
-- **Topic:** `blog_events`
-  - **Evento:** `blog.post.published`
-  - **Descripción:** Se publica cuando un artículo cambia su estado a "publicado". Puede ser consumido por `notifications-service` para notificar a los suscriptores.
-  - **Payload:** `{"event_type": "blog.post.published", "data": {"post_id": "...", "title": "...", "author_id": "..."}}`
-
-### Eventos Consumidos
-
-- **Topic:** `user_events`
-  - **Evento:** `user.deleted`
-  - **Descripción:** Escucha este evento para anonimizar o eliminar el contenido (artículos, comentarios) asociado a un usuario que ha sido eliminado del sistema.
+5.  **Verificar que el servicio está funcionando:**
+    El servicio estará disponible en `http://localhost:8001`.
 
 ---
 
-## Variables de Entorno
+## Ejemplos de uso con cURL
 
-Para ejecutar este servicio, es necesario configurar las siguientes variables en un archivo `.env`.
+Puedes probar los endpoints usando `cURL`:
 
-| Variable                  | Descripción                                     | Ejemplo                  |
-| :------------------------ | :---------------------------------------------- | :----------------------- |
-| `SECRET_KEY`              | Clave secreta de Django.                        | `django-insecure-abc...` |
-| `DEBUG`                   | Activa el modo debug de Django. (`1` o `0`)     | `1`                      |
-| `DB_NAME`                 | Nombre de la base de datos PostgreSQL.          | `blog_db`                |
-| `DB_USER`                 | Usuario para la conexión a la base de datos.    | `blog_user`              |
-| `DB_PASSWORD`             | Contraseña para la conexión a la base de datos. | `supersecretpassword`    |
-| `DB_HOST`                 | Host donde se ejecuta la base de datos.         | `blog_db_postgres`       |
-| `DB_PORT`                 | Puerto de la base de datos.                     | `5432`                   |
-| `KAFKA_BOOTSTRAP_SERVERS` | URL del broker de Kafka.                        | `kafka:9092`             |
-
----
-
-## Desarrollo y Pruebas Locales
-
-Para ejecutar comandos específicos de Django dentro del contenedor de este servicio:
+**Health Check:**
 
 ```bash
-# Aplicar migraciones de la base de datos
-docker-compose exec blog-service python manage.py migrate
+curl -i http://localhost:8001/healthz/
+```
 
-# Ejecutar los tests del servicio
-docker-compose exec blog-service python manage.py test
+**Listar Categorías (cacheado):**
+
+```bash
+curl http://localhost:8001/api/categories/
+```
+
+**Listar Posts (primera página):**
+
+```bash
+curl http://localhost:8001/api/posts/
+```
+
+**Buscar Posts:**
+
+```bash
+curl "http://localhost:8001/api/posts/?search=development"
+```
+
+**Ver detalle de un Post (cacheado):**
+(Reemplaza `un-slug-de-ejemplo` con un slug real que obtengas de la lista de posts)
+
+```bash
+curl http://localhost:8001/api/posts/un-slug-de-ejemplo/
 ```

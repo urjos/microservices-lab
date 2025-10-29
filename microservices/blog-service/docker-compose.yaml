@@ -1,0 +1,61 @@
+version: "3.8"
+services:
+  # Django App
+  blog_service:
+    container_name: blog_service
+    build: .
+    volumes:
+      - .:/app
+    command: >
+      sh -c "python manage.py migrate && 
+             gunicorn core.wsgi:application --bind 0.0.0.0:8001"
+    ports:
+      - 8001:8001
+    depends_on:
+      db_blog:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      - IN_DOCKER=true
+
+  # Event Queue Kafka
+  # queue_blog:
+  # build: .
+  # command: >
+  # sh -c "python consumer.py"
+  # depends_on:
+  # - db
+
+  db_blog:
+    image: postgres
+    container_name: django_blog_api_postgresql
+    restart: always
+    environment:
+      POSTGRES_DB: solopython_blog_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 12345678
+      POSTGRES_HOST_blog_METHOD: trust
+    ports:
+      - 5433:5432
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis
+    container_name: django_blog_api_redis
+    ports:
+      - 6380:6379
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
