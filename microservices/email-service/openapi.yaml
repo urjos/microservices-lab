@@ -1,0 +1,131 @@
+openapi: 3.1.0
+info:
+  title: Email Service API
+  version: 1.0.0
+  description: Microservicio para gestionar y enviar notificaciones por correo electrónico.
+
+paths:
+  /healthz/:
+    get:
+      summary: Health check del servicio
+      tags:
+        - Health
+      responses:
+        "200":
+          description: El servicio está operativo.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "ok"
+                  database:
+                    type: string
+                    example: "ok"
+                  redis:
+                    type: string
+                    example: "ok"
+
+  /api/contact/:
+    post:
+      summary: Envía un mensaje de contacto
+      tags:
+        - Contact
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContactRequest"
+      responses:
+        "202":
+          description: Mensaje de contacto recibido y correo encolado para envío.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueuedResponse"
+        "400":
+          description: Datos de entrada inválidos.
+        "409":
+          description: Clave de idempotencia ya utilizada.
+
+  /api/notify/:
+    post:
+      summary: Envía una notificación interna (ej. desde otro microservicio)
+      tags:
+        - Notifications
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotifyRequest"
+      responses:
+        "202":
+          description: Notificación recibida y correo encolado para envío.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueuedResponse"
+        "400":
+          description: Datos de entrada inválidos.
+        "409":
+          description: Clave de idempotencia ya utilizada.
+
+components:
+  schemas:
+    ContactRequest:
+      type: object
+      required:
+        - idempotency_key
+        - name
+        - email
+        - message
+      properties:
+        idempotency_key:
+          type: string
+          format: uuid
+          description: Clave única para asegurar la idempotencia de la petición.
+        name:
+          type: string
+          description: Nombre del remitente.
+        email:
+          type: string
+          format: email
+          description: Correo electrónico del remitente.
+        message:
+          type: string
+          description: Contenido del mensaje de contacto.
+    NotifyRequest:
+      type: object
+      required:
+        - idempotency_key
+        - to
+        - subject
+        - body
+      properties:
+        idempotency_key:
+          {
+            type: string,
+            format: uuid,
+            description: "Clave única para asegurar la idempotencia de la petición.",
+          }
+        to:
+          {
+            type: string,
+            format: email,
+            description: "Correo electrónico del destinatario.",
+          }
+        subject: { type: string, description: "Asunto del correo." }
+        body: { type: string, description: "Cuerpo del correo." }
+    QueuedResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "queued"
+        message:
+          type: string
+          example: "Email/Notification has been queued for processing."

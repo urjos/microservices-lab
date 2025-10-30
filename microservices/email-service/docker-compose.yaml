@@ -1,0 +1,75 @@
+services:
+  emailservice:
+    build: .
+    container_name: email_service
+    volumes:
+      - .:/app
+    command: >
+      sh -c "python manage.py migrate && 
+             gunicorn core.wsgi:application --bind 0.0.0.0:8002"
+    ports:
+      - 8002:8002
+    depends_on:
+      db_email:
+        condition: service_healthy
+      django_email_api_redis:
+        condition: service_started
+    environment:
+      - IN_DOCKER=true
+    networks:
+      - microservices_network
+
+  db_email:
+    image: postgres:13-alpine
+    container_name: db_email
+    restart: always
+    environment:
+      POSTGRES_DB: solopython_email_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 12345678
+      POSTGRES_HOST_email_METHOD: trust
+    ports:
+      - 5434:5432
+    volumes:
+      - email_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - microservices_network
+
+  django_email_api_redis:
+    image: redis:6-alpine
+    container_name: django_email_api_redis
+    ports:
+      - 6381:6379
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - microservices_network
+
+  # Celery Worker for Email Service
+  email_worker:
+    build: .
+    container_name: email_worker
+    command: celery -A core worker -l info
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    depends_on:
+      - django_email_api_redis
+    networks:
+      - microservices_network
+
+volumes:
+  email_db_data:
+
+networks:
+  microservices_network:
+    external: true

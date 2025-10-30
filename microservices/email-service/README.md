@@ -1,98 +1,76 @@
 # Email Service (`email-service`)
 
-Este microservicio es un "worker" dedicado exclusivamente al envío de correos electrónicos transaccionales de la plataforma.
+Este microservicio es responsable de gestionar y enviar notificaciones por correo electrónico, como las solicitudes de contacto recibidas.
 
 ## Propósito Principal
 
-La responsabilidad de este servicio es centralizar y gestionar todas las comunicaciones salientes por correo electrónico. Actúa como un servicio de utilidad que es invocado de forma asíncrona, desacoplando la lógica de negocio de la entrega de correos.
+Su responsabilidad se centra en:
 
-**Este servicio no expone ninguna API REST pública.**
-
-## Arquitectura y Funcionamiento
-
-El `email-service` opera como un consumidor de eventos de Kafka. Se suscribe a varios topics y, cuando recibe un mensaje relevante, utiliza la información del payload para renderizar una plantilla de correo y enviarla al destinatario correspondiente a través de un servidor SMTP.
-
----
-
-## Integración con Kafka (Eventos Consumidos)
-
-Este servicio actúa únicamente como **Consumidor** de eventos.
-
-| Topic          | Evento                | Acción Realizada                                              | Payload Esperado                                                         |
-| :------------- | :-------------------- | :------------------------------------------------------------ | :----------------------------------------------------------------------- |
-| `user_events`  | `user.created`        | Envía un correo de bienvenida al nuevo usuario.               | `{"email": "...", "name": "..."}`                                        |
-| `user_events`  | `user.password_reset` | Envía un correo con el enlace para restablecer la contraseña. | `{"email": "...", "reset_link": "..."}`                                  |
-| `order_events` | `order.confirmed`     | Envía una confirmación de pedido al cliente.                  | `{"email": "...", "order_id": "...", "total": "..."}`                    |
-| `blog_events`  | `blog.post.published` | Envía una notificación a los suscriptores del blog.           | `{"subscriber_emails": ["..."], "post_title": "...", "post_url": "..."}` |
-
-_(Nota: Los payloads son ejemplos simplificados. Deben contener toda la información necesaria para renderizar la plantilla de correo.)_
+- Recibir solicitudes de contacto a través de un endpoint API.
+- Persistir estas solicitudes en su propia base de datos.
+- Simular el envío de correos electrónicos (configurable para envío real).
+- Proporcionar un endpoint de `healthcheck` para monitorear su estado.
 
 ---
 
-## Gestión de Plantillas (Templates)
+## API Endpoints
 
-Las plantillas de correo electrónico se encuentran en el directorio `email_service/templates/emails/`. Son archivos HTML que utilizan el sistema de plantillas de Django.
-
-- `welcome.html`: Plantilla para el correo de bienvenida.
-- `order_confirmation.html`: Plantilla para la confirmación de pedido.
-
-Para añadir una nueva plantilla, simplemente crea un nuevo archivo HTML en este directorio y actualiza la lógica del consumidor de Kafka para que la utilice con el evento correspondiente.
+| Endpoint        | Método | Descripción                                                                 |
+| :-------------- | :----- | :-------------------------------------------------------------------------- |
+| `/healthz`      | `GET`  | Verifica el estado de la conexión a la base de datos y Redis.               |
+| `/api/contact/` | `POST` | Recibe un formulario de contacto, lo guarda y simula el envío de un correo. |
 
 ---
 
-## Variables de Entorno
+## Cómo ejecutar el servicio
 
-Para ejecutar este servicio, es necesario configurar las siguientes variables en un archivo `.env`.
+1.  **Asegúrate de tener Docker y Docker Compose instalados.**
 
-| Variable                  | Descripción                                                           | Ejemplo                                       |
-| :------------------------ | :-------------------------------------------------------------------- | :-------------------------------------------- |
-| `SECRET_KEY`              | Clave secreta de Django (requerida, aunque no se use intensivamente). | `django-insecure-xyz...`                      |
-| `DEBUG`                   | Activa el modo debug de Django. (`1` o `0`)                           | `0`                                           |
-| `KAFKA_BOOTSTRAP_SERVERS` | URL del broker de Kafka.                                              | `kafka:9092`                                  |
-| `EMAIL_BACKEND`           | Backend de correo de Django.                                          | `django.core.mail.backends.smtp.EmailBackend` |
-| `EMAIL_HOST`              | Host del servidor SMTP.                                               | `smtp.mailgun.org`                            |
-| `EMAIL_PORT`              | Puerto del servidor SMTP.                                             | `587`                                         |
-| `EMAIL_HOST_USER`         | Nombre de usuario para la autenticación SMTP.                         | `postmaster@example.com`                      |
-| `EMAIL_HOST_PASSWORD`     | Contraseña para la autenticación SMTP.                                | `supersecretpassword`                         |
-| `EMAIL_USE_TLS`           | Indica si se debe usar una conexión TLS. (`True` o `False`)           | `True`                                        |
-| `DEFAULT_FROM_EMAIL`      | Dirección de correo electrónico del remitente por defecto.            | `noreply@example.com`                         |
+2.  **Configurar variables de entorno:**
+    Crea un archivo `.env` en la raíz de este servicio (`email-service/`) a partir del ejemplo.
+
+    ```bash
+    cp .env.example .env
+    ```
+
+3.  **Construir y levantar los contenedores:**
+    Desde el directorio raíz del proyecto (`microservices-lab/`), ejecuta:
+
+    ```bash
+    docker-compose up --build -d email_service
+    ```
+
+    Esto construirá la imagen del servicio y levantará su contenedor junto con sus dependencias (`db_email` y `redis`).
+
+4.  **Verificar que el servicio está funcionando:**
+    El servicio estará disponible a través del Reverse Proxy en `http://localhost/api/email/`.
 
 ---
 
-## Desarrollo y Pruebas Locales
+## Ejemplos de uso con cURL
 
-### Backend de Correo para Desarrollo
-
-Para evitar el envío de correos reales durante el desarrollo, se recomienda cambiar el `EMAIL_BACKEND` en tu archivo `.env` local a:
-
-```
-# Imprime el contenido del correo en la consola donde se ejecuta el servicio
-EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend
-```
-
-Alternativamente, puedes usar un servidor SMTP local como MailHog, que captura todos los correos enviados y los muestra en una interfaz web.
-
-### Probar el envío manualmente
-
-Puedes usar el shell de Django para probar el envío de un correo:
+**Health Check:**
 
 ```bash
-# Acceder al shell del servicio
-docker-compose exec email-service python manage.py shell
-
-# Dentro del shell de Python
-from django.core.mail import send_mail
-send_mail(
-    'Asunto de prueba',
-    'Este es un mensaje de prueba.',
-    'from@example.com',
-    ['to@example.com'],
-    fail_silently=False,
-)
+curl -i http://localhost:8002/healthz/
 ```
 
----
+**Enviar un mensaje de contacto:**
 
-## Estado y Persistencia
+```bash
+# Necesitarás generar un UUID para la idempotency_key. Puedes usar un generador online o una herramienta de línea de comandos.
+# Ejemplo de UUID: 550e8400-e29b-41d4-a716-446655440000
 
-Este servicio es **stateless** (sin estado) y no requiere una base de datos. Su escalabilidad se logra simplemente ejecutando más instancias del contenedor.
+curl -X POST http://localhost:8002/api/contact/ \
+-H "Content-Type: application/json" \
+-d '{
+  "idempotency_key": "550e8400-e29b-41d4-a716-446655440000",
+  "name": "Ana", "email": "ana@example.com", "message": "Hola, estoy interesada en su producto."
+}'
+```
+
+Tras ejecutar el comando anterior, deberías ver el contenido del correo en los logs del servicio:
+
+```bash
+docker-compose logs -f email_service
+```

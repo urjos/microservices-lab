@@ -1,0 +1,106 @@
+openapi: 3.1.0
+info:
+  title: Blog Service API
+  version: 1.0.0
+  description: Microservicio para gestionar posts y categorías de un blog.
+
+paths:
+  /api/categories/:
+    get:
+      summary: Lista de categorías activas
+      tags:
+        - Categories
+      responses:
+        "200":
+          description: Una lista de categorías.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Category"
+
+  /api/posts/:
+    get:
+      summary: Lista de posts publicados
+      tags:
+        - Posts
+      parameters:
+        - name: page
+          in: query
+          description: Número de página para la paginación.
+          schema:
+            type: integer
+        - name: search
+          in: query
+          description: Término de búsqueda para filtrar posts por título o cuerpo.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Una lista paginada de posts.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedPostList"
+
+  /api/posts/{slug}/:
+    get:
+      summary: Detalle de un post
+      tags:
+        - Posts
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          description: El slug único del post.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: El objeto completo del post.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PostDetail"
+
+components:
+  schemas:
+    Author:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        display_name: { type: string }
+    Category:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+    PostList:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        slug: { type: string }
+        excerpt: { type: string }
+        author: { $ref: "#/components/schemas/Author" }
+        category: { $ref: "#/components/schemas/Category" }
+        published_at: { type: string, format: date-time }
+    PostDetail:
+      allOf:
+        - $ref: "#/components/schemas/PostList"
+        - type: object
+          properties:
+            body: { type: string }
+            views: { type: integer }
+    PaginatedPostList:
+      type: object
+      properties:
+        count: { type: integer }
+        next: { type: string, format: uri, nullable: true }
+        previous: { type: string, format: uri, nullable: true }
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/PostList"
