@@ -60,6 +60,7 @@ DJANGO_APPS = [
 
 PROJECT_APPS = [
     'apps.notifications',
+    'apps.contact'
 ]
 
 THIRD_PARTY_APPS = [
@@ -196,9 +197,17 @@ EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 POLYGON_RPC=env('POLYGON_RPC', default='') # Añade default=''
 ETHEREUM_RPC=env('ETHEREUM_RPC', default='') # Añade default=''
 
+# Celery Configuration
+CELERY_BROKER_URL = 'redis://django_email_api_redis:6379/1' # Usamos DB 1 para separar de la caché
+CELERY_RESULT_BACKEND = 'redis://django_email_api_redis:6379/1'
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = TIME_ZONE 
+
 if not DEBUG:
     # CSRF_COOKIE_DOMAIN = os.environ.get('CSRF_COOKIE_DOMAIN_DEPLOY')
-    ALLOWED_HOSTS=env.list('ALLOWED_HOSTS_DEPLOY')
+    ALLOWED_HOSTS=env.list('ALLOWED_HOSTS_DEV')
     CORS_ORIGIN_WHITELIST =env.list('CORS_ORIGIN_WHITELIST_DEPLOY')
     CSRF_TRUSTED_ORIGINS =env.list('CSRF_TRUSTED_ORIGINS_DEPLOY')
 

@@ -58,9 +58,15 @@ curl -i http://localhost:8002/healthz/
 **Enviar un mensaje de contacto:**
 
 ```bash
+# Necesitarás generar un UUID para la idempotency_key. Puedes usar un generador online o una herramienta de línea de comandos.
+# Ejemplo de UUID: 550e8400-e29b-41d4-a716-446655440000
+
 curl -X POST http://localhost:8002/api/contact/ \
 -H "Content-Type: application/json" \
--d '{"name": "Ana", "email": "ana@example.com", "message": "Hola, estoy interesada en su producto."}'
+-d '{
+  "idempotency_key": "550e8400-e29b-41d4-a716-446655440000",
+  "name": "Ana", "email": "ana@example.com", "message": "Hola, estoy interesada en su producto."
+}'
 ```
 
 Tras ejecutar el comando anterior, deberías ver el contenido del correo en los logs del servicio:

@@ -1,7 +1,9 @@
 from rest_framework import serializers
-from .models import ContactMessage
+from .models import NotificationLog
 
-class ContactMessageSerializer(serializers.ModelSerializer):
+class NotificationLogSerializer(serializers.ModelSerializer):
+    idempotency_key = serializers.CharField(write_only=True, required=False, allow_null=True)
+
     class Meta:
-        model = ContactMessage
-        fields = ['name', 'email', 'message']
+        model = NotificationLog
+        fields = ['to', 'subject', 'body', 'idempotency_key']

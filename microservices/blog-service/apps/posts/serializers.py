@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from .models import Post
 from apps.authors.models import Author
+from apps.category.models import Category
 from apps.category.serializers import CategorySerializer
 
 
@@ -34,3 +35,20 @@ class PostDetailSerializer(serializers.ModelSerializer):
             'author', 'category',
             'status', 'published_at', 'views'
         ]
+
+class PostCreateSerializer(serializers.ModelSerializer):
+    author = serializers.PrimaryKeyRelatedField(queryset=Author.objects.all())
+    category = serializers.PrimaryKeyRelatedField(queryset=Category.objects.all())
+
+    class Meta:
+        model = Post
+        fields = [
+            'title', 'body', 'author', 'category', 'status'
+        ]
+        read_only_fields = ['slug', 'published_at', 'views'] # Estos se generarán automáticamente o se establecerán
+
+    def create(self, validated_data):
+        # Generamos el slug automáticamente a partir del título
+        from slugify import slugify
+        validated_data['slug'] = slugify(validated_data['title'])
+        return super().create(validated_data)

@@ -196,6 +196,9 @@ FILE_UPLOAD_PERMISSIONS = 0o640
 POLYGON_RPC=env('POLYGON_RPC', default='') # Añade default=''
 ETHEREUM_RPC=env('ETHEREUM_RPC', default='') # Añade default=''
 
+EMAIL_SERVICE_BASE_URL = env('EMAIL_SERVICE_BASE_URL', default='http://emailservice:8002')
+BLOG_POST_NOTIFICATION_RECIPIENT = env('BLOG_POST_NOTIFICATION_RECIPIENT', default='admin@solopython.com')
+
 if not DEBUG:
     # CSRF_COOKIE_DOMAIN = os.environ.get('CSRF_COOKIE_DOMAIN_DEPLOY')
     ALLOWED_HOSTS=env.list('ALLOWED_HOSTS_DEPLOY')

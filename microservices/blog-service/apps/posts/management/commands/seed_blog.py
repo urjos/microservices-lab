@@ -14,7 +14,6 @@ class Command(BaseCommand):
     def handle(self, *args, **kwargs):
         self.stdout.write("Starting to seed the database...")
 
-        # Limpiar datos antiguos
         self.stdout.write("Cleaning old data...")
         Post.objects.all().delete()
         Category.objects.all().delete()
@@ -22,7 +21,6 @@ class Command(BaseCommand):
 
         fake = Faker()
 
-        # --- Crear Categorías ---
         self.stdout.write("Creating categories...")
         categories = []
         category_names = ['Technology', 'Software Development', 'Productivity', 'Business', 'Lifestyle']
@@ -31,7 +29,6 @@ class Command(BaseCommand):
             categories.append(category)
         self.stdout.write(self.style.SUCCESS(f"{len(categories)} categories created."))
 
-        # --- Crear Autores ---
         self.stdout.write("Creating authors...")
         authors = []
         for _ in range(3):
@@ -42,7 +39,6 @@ class Command(BaseCommand):
             authors.append(author)
         self.stdout.write(self.style.SUCCESS(f"{len(authors)} authors created."))
 
-        # --- Crear Posts ---
         self.stdout.write("Creating posts...")
         posts = []
         for _ in range(30):
